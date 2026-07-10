@@ -51,6 +51,9 @@ Ainsi le même skill est lisible et exécutable par **Claude Code ET Hermès**.
 - `critical-collaboration/` — anti-complaisance, désaccord utile.
 - `careful-guard/` — garde-fou avant action destructrice/irréversible.
 
+### Outils (via guichet MCP partagé)
+- `youtube-transcript/` — récupérer un transcript YouTube via l'outil MCP `youtube_transcript` (voir runbook `Guichet MCP youtube-transcript` dans le vault).
+
 ### Méta (maintenir le parc)
 - `skill-creator/` — créer, améliorer, évaluer des skills.
 - `subagent-driven-development/` — déléguer à des sous-agents, vérifier avant d'intégrer.
