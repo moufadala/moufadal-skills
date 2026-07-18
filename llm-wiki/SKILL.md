@@ -5,76 +5,250 @@ version: 1.0.0
 license: MIT
 platforms: [linux, macos, windows]
 ---
-# LLM Wiki — base de connaissance markdown « compounding »
 
-Construire une base de connaissance **durable et cumulative** en fichiers markdown reliés. Contrairement au RAG (qui redécouvre le savoir à chaque requête), le wiki **compile le savoir une fois** et le garde à jour : les liens croisés sont déjà là, les contradictions déjà signalées.
+# Karpathy's LLM Wiki
 
-**Répartition des rôles** : l'humain choisit les sources et dirige l'analyse ; l'agent résume, relie, classe et maintient la cohérence.
+Build and maintain a persistent, compounding knowledge base as interlinked markdown files.
+Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 
-## Quand l'utiliser
-- Créer / démarrer un wiki ou un second brain markdown.
-- Ingérer une source (article, transcript, papier) dans le wiki.
-- Répondre à une question quand un wiki existe déjà.
-- Auditer / linter la cohérence du wiki.
+Unlike traditional RAG (which rediscovers knowledge from scratch per query), the wiki
+compiles knowledge once and keeps it current. Cross-references are already there.
+Contradictions have already been flagged. Synthesis reflects everything ingested.
 
-## Où vit le wiki
-Un simple dossier de fichiers markdown — ouvrable dans Obsidian, VS Code, n'importe quel éditeur. Aucune base de données. **Demander le chemin à l'utilisateur** (ou utiliser le dossier de vault configuré du projet) ; ne jamais coder un chemin machine en dur.
+**Division of labor:** The human curates sources and directs analysis. The agent
+summarizes, cross-references, files, and maintains consistency.
 
-## Architecture — 3 couches
+## When This Skill Activates
+
+Use this skill when the user:
+- Asks to create, build, or start a wiki or knowledge base
+- Asks to ingest, add, or process a source into their wiki
+- Asks a question and an existing wiki is present at the configured path
+- Asks to lint, audit, or health-check their wiki
+- References their wiki, knowledge base, or "notes" in a research context
+
+## Wiki Location
+
+**Location:** Set via `WIKI_PATH` environment variable (e.g. in `~/.hermes/.env`).
+
+If unset, defaults to `~/wiki`.
+
+```bash
+WIKI="${WIKI_PATH:-$HOME/wiki}"
+```
+
+The wiki is just a directory of markdown files — open it in Obsidian, VS Code, or
+any editor. No database, no special tooling required.
+
+## Architecture: Three Layers
+
 ```
 wiki/
-├── SCHEMA.md      # conventions, structure, taxonomie de tags
-├── index.md       # catalogue des pages, 1 ligne de résumé chacune
-├── log.md         # journal chronologique, append-only
-├── raw/           # Couche 1 : sources brutes, IMMUABLES (jamais modifiées)
-├── entities/      # Couche 2 : pages entité (personnes, orgs, produits)
-├── concepts/      # Couche 2 : pages concept / sujet
-└── comparisons/   # Couche 2 : analyses comparées
+├── SCHEMA.md           # Conventions, structure rules, domain config
+├── index.md            # Sectioned content catalog with one-line summaries
+├── log.md              # Chronological action log (append-only, rotated yearly)
+├── raw/                # Layer 1: Immutable source material
+│   ├── articles/       # Web articles, clippings
+│   ├── papers/         # PDFs, arxiv papers
+│   ├── transcripts/    # Meeting notes, interviews
+│   └── assets/         # Images, diagrams referenced by sources
+├── entities/           # Layer 2: Entity pages (people, orgs, products, models)
+├── concepts/           # Layer 2: Concept/topic pages
+├── comparisons/        # Layer 2: Side-by-side analyses
+└── queries/            # Layer 2: Filed query results worth keeping
 ```
-- **Couche 1 — sources brutes** : immuables ; l'agent lit, ne modifie jamais.
-- **Couche 2 — le wiki** : pages markdown créées et reliées par l'agent.
-- **Couche 3 — le schéma** (`SCHEMA.md`) : structure, conventions, tags.
 
-## Rituel d'orientation (À CHAQUE session sur un wiki existant)
-Avant toute action :
-1. Lire `SCHEMA.md` (domaine, conventions, taxonomie).
-2. Lire `index.md` (pages existantes + résumés).
-3. Parcourir la fin de `log.md` (20-30 dernières entrées).
+**Layer 1 — Raw Sources:** Immutable. The agent reads but never modifies these.
+**Layer 2 — The Wiki:** Agent-owned markdown files. Created, updated, and
+cross-referenced by the agent.
+**Layer 3 — The Schema:** `SCHEMA.md` defines structure, conventions, and tag taxonomy.
 
-Puis, pour un gros wiki, chercher le sujet courant avant de créer quoi que ce soit. Ça évite : doublons, liens manqués, contradictions avec le schéma, travail refait.
+## Resuming an Existing Wiki (CRITICAL — do this every session)
 
-## Frontmatter d'une page
+When the user has an existing wiki, **always orient yourself before doing anything**:
+
+① **Read `SCHEMA.md`** — understand the domain, conventions, and tag taxonomy.
+② **Read `index.md`** — learn what pages exist and their summaries.
+③ **Scan recent `log.md`** — read the last 20-30 entries to understand recent activity.
+
+```bash
+WIKI="${WIKI_PATH:-$HOME/wiki}"
+# Orientation reads at session start
+read_file "$WIKI/SCHEMA.md"
+read_file "$WIKI/index.md"
+read_file "$WIKI/log.md" offset=<last 30 lines>
+```
+
+Only after orientation should you ingest, query, or lint. This prevents:
+- Creating duplicate pages for entities that already exist
+- Missing cross-references to existing content
+- Contradicting the schema's conventions
+- Repeating work already logged
+
+For large wikis (100+ pages), also run a quick `search_files` for the topic
+at hand before creating anything new.
+
+## Initializing a New Wiki
+
+When the user asks to create or start a wiki:
+
+1. Determine the wiki path (from `$WIKI_PATH` env var, or ask the user; default `~/wiki`)
+2. Create the directory structure above
+3. Ask the user what domain the wiki covers — be specific
+4. Write `SCHEMA.md` customized to the domain (see template below)
+5. Write initial `index.md` with sectioned header
+6. Write initial `log.md` with creation entry
+7. Confirm the wiki is ready and suggest first sources to ingest
+
+### SCHEMA.md Template
+
+Adapt to the user's domain. The schema constrains agent behavior and ensures consistency:
+
+```markdown
+# Wiki Schema
+
+## Domain
+[What this wiki covers — e.g., "AI/ML research", "personal health", "startup intelligence"]
+
+## Conventions
+- File names: lowercase, hyphens, no spaces (e.g., `transformer-architecture.md`)
+- Every wiki page starts with YAML frontmatter (see below)
+- Use `[[wikilinks]]` to link between pages (minimum 2 outbound links per page)
+- When updating a page, always bump the `updated` date
+- Every new page must be added to `index.md` under the correct section
+- Every action must be appended to `log.md`
+- **Provenance markers:** On pages that synthesize 3+ sources, append `^[raw/articles/source-file.md]`
+  at the end of paragraphs whose claims come from a specific source. This lets a reader trace each
+  claim back without re-reading the whole raw file. Optional on single-source pages where the
+  `sources:` frontmatter is enough.
+
+## Frontmatter
+  ```yaml
+  ---
+  title: Page Title
+  created: YYYY-MM-DD
+  updated: YYYY-MM-DD
+  type: entity | concept | comparison | query | summary
+  tags: [from taxonomy below]
+  sources: [raw/articles/source-name.md]
+  # Optional quality signals:
+  confidence: high | medium | low        # how well-supported the claims are
+  contested: true                        # set when the page has unresolved contradictions
+  contradictions: [other-page-slug]      # pages this one conflicts with
+  ---
+  ```
+
+`confidence` and `contested` are optional but recommended for opinion-heavy or fast-moving
+topics. Lint surfaces `contested: true` and `confidence: low` pages for review so weak claims
+don't silently harden into accepted wiki fact.
+
+### raw/ Frontmatter
+
+Raw sources ALSO get a small frontmatter block so re-ingests can detect drift:
+
 ```yaml
 ---
-title: Titre de la page
-created: AAAA-MM-JJ
-updated: AAAA-MM-JJ
-type: entity | concept | comparison | query | summary
-tags: [issus de la taxonomie]
-sources: [raw/articles/source.md]
-confidence: high | medium | low   # optionnel
-contested: true                   # si contradictions non résolues
+source_url: https://example.com/article   # original URL, if applicable
+ingested: YYYY-MM-DD
+sha256: <hex digest of the raw content below the frontmatter>
 ---
 ```
-Les sources brutes reçoivent aussi un petit frontmatter (`source_url`, `ingested`, `sha256` du corps) pour détecter les ré-ingestions et les dérives.
 
-## Seuils (éviter le fouillis)
-- **Créer une page** quand une entité/concept apparaît dans 2+ sources OU est centrale à une source.
-- **Compléter une page existante** quand la source recoupe l'existant.
-- **NE PAS créer** de page pour une mention en passant.
-- **Scinder** une page > ~200 lignes en sous-sujets reliés.
-- **Archiver** une page entièrement remplacée.
+The `sha256:` lets a future re-ingest of the same URL skip processing when content is unchanged,
+and flag drift when it has changed. Compute over the body only (everything after the closing
+`---`), not the frontmatter itself.
 
-## Politique de mise à jour (contradictions)
-1. Comparer les dates (le plus récent prime en général).
-2. Si vraiment contradictoire : noter les deux positions avec dates + sources.
-3. Marquer `contradictions: [autre-page]` dans le frontmatter.
-4. Signaler pour revue humaine.
+## Tag Taxonomy
+[Define 10-20 top-level tags for the domain. Add new tags here BEFORE using them.]
 
-## Règles de cohérence
-- Fichiers : minuscules, tirets, pas d'espaces (`transformer-architecture.md`).
-- Chaque page : ≥ 2 wikilinks sortants `[[...]]`, ajoutée à `index.md`, action loggée dans `log.md`.
-- Chaque tag utilisé doit exister dans la taxonomie du `SCHEMA.md` (l'ajouter **avant** usage) → évite la prolifération de tags.
+Example for AI/ML:
+- Models: model, architecture, benchmark, training
+- People/Orgs: person, company, lab, open-source
+- Techniques: optimization, fine-tuning, inference, alignment, data
+- Meta: comparison, timeline, controversy, prediction
 
-## Principe directeur
-Le but n'est pas d'accumuler des notes, mais de **répondre vite avec preuve** : où on en est, pourquoi, quelle source, ce qui a changé, prochaine action. Markdown-first ; pas de RAG / vector lourd tant que le volume ne le justifie pas.
+Rule: every tag on a page must appear in this taxonomy. If a new tag is needed,
+add it here first, then use it. This prevents tag sprawl.
+
+## Page Thresholds
+- **Create a page** when an entity/concept appears in 2+ sources OR is central to one source
+- **Add to existing page** when a source mentions something already covered
+- **DON'T create a page** for passing mentions, minor details, or things outside the domain
+- **Split a page** when it exceeds ~200 lines — break into sub-topics with cross-links
+- **Archive a page** when its content is fully superseded — move to `_archive/`, remove from index
+
+## Entity Pages
+One page per notable entity. Include:
+- Overview / what it is
+- Key facts and dates
+- Relationships to other entities ([[wikilinks]])
+- Source references
+
+## Concept Pages
+One page per concept or topic. Include:
+- Definition / explanation
+- Current state of knowledge
+- Open questions or debates
+- Related concepts ([[wikilinks]])
+
+## Comparison Pages
+Side-by-side analyses. Include:
+- What is being compared and why
+- Dimensions of comparison (table format preferred)
+- Verdict or synthesis
+- Sources
+
+## Update Policy
+When new information conflicts with existing content:
+1. Check the dates — newer sources generally supersede older ones
+2. If genuinely contradictory, note both positions with dates and sources
+3. Mark the contradiction in frontmatter: `contradictions: [page-name]`
+4. Flag for user review in the lint report
+```
+
+### index.md Template
+
+The index is sectioned by type. Each entry is one line: wikilink + summary.
+
+```markdown
+# Wiki Index
+
+> Content catalog. Every wiki page listed under its type with a one-line summary.
+> Read this first to find relevant pages for any query.
+> Last updated: YYYY-MM-DD | Total pages: N
+
+## Entities
+<!-- Alphabetical within section -->
+
+## Concepts
+
+## Comparisons
+
+## Queries
+```
+
+**Scaling rule:** When any section exceeds 50 entries, split it into sub-sections
+by first letter or sub-domain. When the index exceeds 200 entries total, create
+a `_meta/topic-map.md` that groups pages by theme for faster navigation.
+
+### log.md Template
+
+```markdown
+# Wiki Log
+
+> Chronological record of all wiki actions. Append-only.
+> Format: `## [YYYY-MM-DD] action | subject`
+> Actions: ingest, update, query, lint, create, archive, delete
+> When this file exceeds 500 entries, rotate: rename to log-YYYY.md, start fresh.
+
+## [YYYY-MM-DD] create | Wiki initialized
+- Domain: [domain]
+- Structure created with SCHEMA.md, index.md, log.md
+```
+
+
+## Detailed workflow reference
+
+Detailed material from `## Core Operations` onward was moved to `references/extracted-workflow-20260703T045015Z.md` to keep the always-loaded SKILL.md compact.
+
+Read that reference before acting on requests that need those commands, examples, pitfalls, or verification steps.
